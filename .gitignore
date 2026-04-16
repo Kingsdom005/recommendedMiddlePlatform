@@ -1,0 +1,73 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build artifacts
+dist/
+build/
+out/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Temporary files
+tmp/
+temp/
+
+# Documentation
+*.md
+
+# GitHub
+.github/
+
+# Test coverage
+coverage/
+*.lcov
+
+# TypeScript
+*.tsbuildinfo
+
+.env
+
+# ignore everything under these folders
+data/mock_data/*
+data/output/*
+model/models/*
+
+# but keep the folders themselves via placeholder files
+!data/mock_data/.gitkeep
+!data/output/.gitkeep
+!model/models/.gitkeep
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
