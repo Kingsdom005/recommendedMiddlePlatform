@@ -6,7 +6,7 @@
 
 ## 快速开始（仅运行可忽略后面的内容）
 
-1. 下载压缩包models.zip，直接解压到[proj_root_dir]/model/models即可，确保pt文件在路径如：[proj_root_dir]/model/models/\*.pt即可。
+1. 下载压缩包models.zip，直接解压到[proj_root_dir]/model/models即可，确保pt文件在路径如：[proj_root_dir]/model/models/\*.pt即可；
 2. 如果想跑各个流程和端到端流程，可以直接python [proj_root_dir]/pipeline/[stream].py；
 3. 跑离线流程需要配置kafka, hbase, elasticsearch和redis，然后改[proj_root_dir]/config/config.py或.env，可以使用工具python [proj_root_dir]\tests\test_all_components.py来测试kafka, hbase, elasticsearch和redis是否都环境配置成功；
 4. 如果只跑推荐流程，只用配置常见环境，把压缩包解压到models对应位置，然后运行online_inference_pipeline.py这个文件即可；
