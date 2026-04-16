@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from config.config import config
 from feature_store.hbase_utils import hbase_utils
 from feature_store.redis_utils import redis_utils
+from monitor.monitoring_utils import get_monitoring
 
 # 数据目录
 DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'mock_data')
@@ -37,6 +38,7 @@ class DataLoader:
             'features': 0
         }
         self.es = None
+        self.monitoring = get_monitoring()
     
     def check_existing_data(self):
         """检查是否已经有数据存在"""
@@ -44,32 +46,21 @@ class DataLoader:
         
         # 检查 HBase 是否有用户数据
         try:
-            from happybase import Connection
-            conn = Connection(host=config.HBASE_HOST, port=config.HBASE_PORT)
-            tables = conn.tables()
-            if b'user_profile' in tables:
-                table = conn.table('user_profile')
-                # 尝试扫描一行数据
-                for key, data in table.scan(limit=1):
-                    print("  HBase 中已存在用户数据")
-                    conn.close()
-                    return True
-            conn.close()
+            # 使用 hbase_utils 检查数据
+            test_user_id = "u00000001"
+            user_data = hbase_utils.get_user_profile(test_user_id)
+            if user_data:
+                print("  HBase 中已存在用户数据")
+                return True
         except Exception as e:
             print(f"  检查 HBase 数据失败: {repr(e)}")
         
         # 检查 Redis 是否有用户特征数据
         try:
-            # 尝试获取一个用户特征
-            import redis
-            r = redis.Redis(
-                host=config.REDIS_HOST,
-                port=config.REDIS_PORT,
-                password=config.REDIS_PASSWORD,
-                db=config.REDIS_DB
-            )
-            keys = r.keys('user:*:features')
-            if len(keys) > 0:
+            # 使用 redis_utils 检查数据
+            test_user_id = "u00000001"
+            user_features = redis_utils.get_user_features(test_user_id)
+            if user_features:
                 print("  Redis 中已存在用户特征数据")
                 return True
         except Exception as e:
@@ -77,15 +68,13 @@ class DataLoader:
         
         # 检查 Elasticsearch 是否有视频数据
         try:
-            es = self.get_es_client()
-            if es is not None:
-                index_name = getattr(config, 'ES_VIDEO_INDEX', 'videos')
-                if es.indices.exists(index=index_name):
-                    # 尝试搜索一条数据
-                    result = es.search(index=index_name, size=1)
-                    if result['hits']['total']['value'] > 0:
-                        print("  Elasticsearch 中已存在视频数据")
-                        return True
+            # 使用 es_utils 检查数据
+            from feature_store.elasticsearch_utils import es_utils
+            test_video_id = "v00000001"
+            video_data = es_utils.get_video(test_video_id)
+            if video_data:
+                print("  Elasticsearch 中已存在视频数据")
+                return True
         except Exception as e:
             print(f"  检查 Elasticsearch 数据失败: {repr(e)}")
         
@@ -111,7 +100,7 @@ class DataLoader:
             es_port = getattr(config, 'ES_PORT', 9200)
             es_user = getattr(config, 'ES_USER', 'elastic')
             es_password = getattr(config, 'ES_PASSWORD', '123456')
-            es_scheme = getattr(config, 'ES_SCHEME', 'https')
+            es_scheme = getattr(config, 'ES_SCHEME', 'http')
 
             es_url = f"{es_scheme}://{es_host}:{es_port}"
 
@@ -245,6 +234,10 @@ class DataLoader:
         elapsed_time = time.time() - start_time
         avg_rate = total / elapsed_time if elapsed_time > 0 else 0
         print(f"  完成: {total} 条 | 耗时: {elapsed_time:.2f}秒 | 平均速率: {avg_rate:.1f} 条/秒")
+        
+        # 记录监控指标
+        self.monitoring.record_data_load('hbase', 'users', total, elapsed_time)
+        
         return len(users)
 
     # =========================
@@ -280,6 +273,13 @@ class DataLoader:
             with open(file_path, 'r', encoding='utf-8') as f:
                 videos = json.load(f)
             print(f"  模拟加载 {len(videos)} 条视频数据到 Elasticsearch")
+            # 实际加载到 mock Elasticsearch
+            from feature_store.elasticsearch_utils import es_utils
+            for i, video in enumerate(videos):
+                if i % 10000 == 0:
+                    print(f"  进度: {i}/{len(videos)}")
+                es_utils.index_video(video['video_id'], video)
+            print(f"  完成: {len(videos)} 条视频数据加载到 mock Elasticsearch")
             return len(videos)
 
         if not self.check_es_connection():
@@ -287,6 +287,13 @@ class DataLoader:
             with open(file_path, 'r', encoding='utf-8') as f:
                 videos = json.load(f)
             print(f"  模拟加载 {len(videos)} 条视频数据到 Elasticsearch")
+            # 实际加载到 mock Elasticsearch
+            from feature_store.elasticsearch_utils import es_utils
+            for i, video in enumerate(videos):
+                if i % 10000 == 0:
+                    print(f"  进度: {i}/{len(videos)}")
+                es_utils.index_video(video['video_id'], video)
+            print(f"  完成: {len(videos)} 条视频数据加载到 mock Elasticsearch")
             return len(videos)
 
         with open(file_path, 'r', encoding='utf-8') as f:
@@ -297,6 +304,13 @@ class DataLoader:
             # 使用模拟实现
             print("  Elasticsearch 客户端不可用，使用模拟实现")
             print(f"  模拟加载 {len(videos)} 条视频数据到 Elasticsearch")
+            # 实际加载到 mock Elasticsearch
+            from feature_store.elasticsearch_utils import es_utils
+            for i, video in enumerate(videos):
+                if i % 10000 == 0:
+                    print(f"  进度: {i}/{len(videos)}")
+                es_utils.index_video(video['video_id'], video)
+            print(f"  完成: {len(videos)} 条视频数据加载到 mock Elasticsearch")
             return len(videos)
 
         index_name = getattr(config, 'ES_VIDEO_INDEX', 'videos')
@@ -339,6 +353,9 @@ class DataLoader:
             print(f"  共加载 {loaded_count} 条视频数据到 Elasticsearch")
             if failed_count > 0:
                 print(f"  共失败 {failed_count} 条视频数据")
+            
+            # 记录监控指标
+            self.monitoring.record_data_load('elasticsearch', 'videos', loaded_count, 0)
 
             return loaded_count
 
@@ -347,6 +364,8 @@ class DataLoader:
             # 使用模拟实现
             print("  使用模拟实现加载视频数据")
             print(f"  模拟加载 {len(videos)} 条视频数据到 Elasticsearch")
+            # 记录监控指标
+            self.monitoring.record_data_load('elasticsearch', 'videos', len(videos), 0)
             return len(videos)
 
     # =========================
@@ -395,6 +414,10 @@ class DataLoader:
         elapsed_time = time.time() - start_time
         avg_rate = total / elapsed_time if elapsed_time > 0 else 0
         print(f"  完成: {total} 条 | 耗时: {elapsed_time:.2f}秒 | 平均速率: {avg_rate:.1f} 条/秒")
+        
+        # 记录监控指标
+        self.monitoring.record_data_load('hbase', 'behaviors', total, elapsed_time)
+        
         return len(behaviors)
 
     # =========================
@@ -436,6 +459,10 @@ class DataLoader:
         elapsed_time = time.time() - start_time
         avg_rate = total / elapsed_time if elapsed_time > 0 else 0
         print(f"  完成: {total} 条 | 耗时: {elapsed_time:.2f}秒 | 平均速率: {avg_rate:.1f} 条/秒")
+        
+        # 记录监控指标
+        self.monitoring.record_data_load('redis', 'features', total, elapsed_time)
+        
         return len(features)
 
     # =========================

@@ -45,8 +45,10 @@ class MockElasticsearch:
             print(f"[MockElasticsearch] Updated document {id} in {index}: {body}")
 
 class ElasticsearchUtils:
-    def __init__(self):
+    def __init__(self, use_mock=False):
         try:
+            if use_mock:
+                raise Exception("Forcing mock implementation")
             from elasticsearch import Elasticsearch
             self.es = Elasticsearch(
                 config.ES_HOSTS,
@@ -59,7 +61,7 @@ class ElasticsearchUtils:
             print("[Elasticsearch] Using mock implementation")
             self.es = MockElasticsearch(config.ES_HOSTS)
             self.use_mock = True
-    
+
     def index_video(self, video_id, video_data):
         """索引视频数据"""
         self.es.index(
@@ -95,4 +97,4 @@ class ElasticsearchUtils:
             body={'doc': video_data}
         )
 
-es_utils = ElasticsearchUtils()
+es_utils = ElasticsearchUtils(use_mock=True)

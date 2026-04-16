@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 测试推荐中台系统中用到的各个组件的基本功能
+kafka, hbase, elasticsearch, redis
 """
 
 import os
@@ -65,112 +66,187 @@ class ComponentTester:
         """测试 HBase 功能"""
         print("\n[2/5] 测试 HBase...")
         try:
-            from feature_store.hbase_utils import hbase_utils
+            # 直接使用 happybase 连接，不使用 mock
+            from happybase import Connection
             
-            # 测试连接
             print("  测试 HBase 连接...")
+            conn = Connection(host=config.HBASE_HOST, port=config.HBASE_PORT)
             
-            # 测试数据操作
-            test_user_id = "test_user"
-            test_behavior_id = "1"
-            test_behavior_data = {"item_id": "123", "behavior": "click", "timestamp": 1234567890}
+            # 测试创建表
+            print("  测试创建表...")
+            table_name = 'test_table'
+            # 如果表已存在，先删除
+            if table_name.encode() in conn.tables():
+                print("  [INFO] 表已存在，删除旧表...")
+                conn.delete_table(table_name, disable=True)
+                print("  [OK] 旧表已删除")
+            conn.create_table(
+                table_name,
+                {'cf1': dict()}
+            )
+            print("  [OK] 表创建成功")
             
-            # 测试存储用户行为数据
+            # 测试写入数据
             print("  测试数据写入...")
-            hbase_utils.put_user_behavior(test_user_id, test_behavior_id, test_behavior_data)
+            table = conn.table(table_name)
+            table.put(b'row1', {b'cf1:column1': b'value1'})
             print("  [OK] 数据写入成功")
             
-            # 测试获取用户行为数据
+            # 测试读取数据
             print("  测试数据读取...")
-            behaviors = hbase_utils.get_user_behaviors(test_user_id)
-            print(f"  [OK] 数据读取成功，获取到 {len(behaviors)} 条记录")
+            row = table.row(b'row1')
+            if row:
+                print(f"  [OK] 数据读取成功: {row}")
+            else:
+                print("  [WARNING] 数据读取失败")
+            
+            # 删除测试表
+            print("  清理测试表...")
+            conn.delete_table(table_name, disable=True)
+            conn.close()
+            print("  [OK] 测试表已删除")
             
             self.results['hbase'] = True
             print("  [OK] HBase 测试通过")
         except Exception as e:
             print(f"  [ERROR] HBase 测试失败: {e}")
+            import traceback
+            traceback.print_exc()
             self.results['hbase'] = False
     
     def test_elasticsearch(self):
         """测试 Elasticsearch 功能"""
         print("\n[3/5] 测试 Elasticsearch...")
         try:
-            from feature_store.elasticsearch_utils import es_utils
+            # 直接使用 elasticsearch 客户端，不使用 mock
+            from elasticsearch import Elasticsearch
             
-            # 测试连接
             print("  测试 Elasticsearch 连接...")
+            es = Elasticsearch(
+                config.ES_HOSTS,
+                basic_auth=(config.ES_USER, config.ES_PASSWORD)
+            )
+            
+            # 测试集群信息
+            print("  测试集群信息...")
+            info = es.info()
+            print(f"  [OK] 集群名称: {info['cluster_name']}")
             
             # 测试索引操作
-            test_video_id = "test_video_1"
-            test_video_data = {
-                "title": "测试视频",
-                "content": "这是一个测试视频",
+            print("  测试文档索引...")
+            test_index = 'test_index'
+            test_doc_id = 'test_doc_1'
+            test_doc = {
+                "title": "测试文档",
+                "content": "这是一个测试文档",
                 "category": "测试",
-                "views": 100,
-                "created_at": "2026-04-15"
+                "views": 100
             }
             
-            # 索引视频
-            print("  测试文档索引...")
-            es_utils.index_video(test_video_id, test_video_data)
+            # 删除已存在的索引
+            if es.indices.exists(index=test_index):
+                es.indices.delete(index=test_index)
+                print("  [OK] 已删除旧索引")
+            
+            # 创建索引
+            es.indices.create(index=test_index)
+            print("  [OK] 索引创建成功")
+            
+            # 索引文档
+            es.index(index=test_index, id=test_doc_id, body=test_doc)
             print("  [OK] 文档索引成功")
             
-            # 搜索视频
+            # 刷新索引
+            es.indices.refresh(index=test_index)
+            print("  [OK] 索引刷新成功")
+            
+            # 测试文档搜索
             print("  测试文档搜索...")
-            query = {"match": {"content": "测试"}}
-            results = es_utils.search_videos(query, size=5)
-            print(f"  [OK] 搜索成功，找到 {len(results)} 个结果")
+            result = es.search(index=test_index, body={"query": {"match": {"content": "测试"}}})
+            print(f"  [OK] 搜索成功，找到 {result['hits']['total']['value']} 个结果")
             
-            # 测试获取视频
+            # 测试获取文档
             print("  测试文档获取...")
-            video = es_utils.get_video(test_video_id)
-            if video:
-                print("  [OK] 文档获取成功")
-            else:
-                print("  [WARNING] 文档获取失败")
+            doc = es.get(index=test_index, id=test_doc_id)
+            if doc:
+                print(f"  [OK] 文档获取成功: {doc['_source']}")
             
+            # 删除测试索引
+            print("  清理测试索引...")
+            es.indices.delete(index=test_index)
+            print("  [OK] 测试索引已删除")
+            
+            es.close()
             self.results['elasticsearch'] = True
             print("  [OK] Elasticsearch 测试通过")
         except Exception as e:
             print(f"  [ERROR] Elasticsearch 测试失败: {e}")
+            import traceback
+            traceback.print_exc()
             self.results['elasticsearch'] = False
     
     def test_redis(self):
         """测试 Redis 功能"""
         print("\n[4/5] 测试 Redis...")
         try:
-            from feature_store.redis_utils import redis_utils
+            # 直接使用 redis 客户端，不使用 mock
+            import redis
+            
+            print("  测试 Redis 连接...")
+            r = redis.Redis(
+                host=config.REDIS_HOST,
+                port=config.REDIS_PORT,
+                password=config.REDIS_PASSWORD,
+                db=config.REDIS_DB
+            )
             
             # 测试连接
-            print("  测试 Redis 连接...")
+            print("  测试 PING...")
+            result = r.ping()
+            print(f"  [OK] PING 结果: {result}")
             
             # 测试数据操作
+            print("  测试数据设置...")
             test_key = "test_key"
             test_value = "test_value"
-            
-            # 设置数据
-            print("  测试数据设置...")
-            redis_utils.set_feature(test_key, test_value)
+            r.set(test_key, test_value)
             print("  [OK] 数据设置成功")
             
-            # 获取数据
+            # 测试数据获取
             print("  测试数据获取...")
-            value = redis_utils.get_feature(test_key)
-            print(f"  [OK] 数据获取成功: {value}")
+            value = r.get(test_key)
+            if value:
+                print(f"  [OK] 数据获取成功: {value.decode('utf-8')}")
+            else:
+                print("  [WARNING] 数据获取失败")
             
             # 测试用户特征操作
             print("  测试用户特征操作...")
             test_user_id = "test_user"
             test_feature_name = "activity_score"
             test_feature_value = 0.8
-            redis_utils.set_user_feature(test_user_id, test_feature_name, test_feature_value)
-            user_features = redis_utils.get_user_features(test_user_id)
-            print(f"  [OK] 用户特征操作成功，获取到 {len(user_features)} 个特征")
+            feature_key = f"user:{test_user_id}:feature:{test_feature_name}"
+            r.set(feature_key, str(test_feature_value))
+            print("  [OK] 用户特征设置成功")
             
+            # 获取用户特征
+            feature_value = r.get(feature_key)
+            if feature_value:
+                print(f"  [OK] 用户特征获取成功: {feature_value.decode('utf-8')}")
+            
+            # 清理测试数据
+            print("  清理测试数据...")
+            r.delete(test_key)
+            r.delete(feature_key)
+            print("  [OK] 测试数据已删除")
+            
+            r.close()
             self.results['redis'] = True
             print("  [OK] Redis 测试通过")
         except Exception as e:
             print(f"  [ERROR] Redis 测试失败: {e}")
+            import traceback
+            traceback.print_exc()
             self.results['redis'] = False
     
     def test_hadoop(self):

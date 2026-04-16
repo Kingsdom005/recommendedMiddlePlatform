@@ -20,6 +20,14 @@ class MockHBaseTable:
                 if len(result) >= limit:
                     break
         return result
+    
+    def row(self, row_key):
+        if row_key.decode('utf-8') in self.data:
+            data = self.data[row_key.decode('utf-8')]
+            return {
+                b'profile:data': data.get('profile:data', '{}').encode('utf-8')
+            }
+        return {}
 
 class MockHBaseConnection:
     def __init__(self, host, port):
@@ -71,6 +79,27 @@ class HBaseUtils:
             behavior_data = json.loads(data[b'behavior:data'].decode('utf-8'))
             behaviors.append(behavior_data)
         return behaviors
+    
+    def get_user_profile(self, user_id):
+        """获取用户画像"""
+        try:
+            table = self.get_table('user_profile')
+            row = table.row(user_id.encode('utf-8'))
+            if row and b'profile:data' in row:
+                return json.loads(row[b'profile:data'].decode('utf-8'))
+            return None
+        except Exception as e:
+            print(f"[HBase] Error getting user profile: {e}")
+            return None
+    
+    def put_user_profile(self, user_id, profile_data):
+        """存储用户画像"""
+        table = self.get_table('user_profile')
+        row_key = user_id
+        data = {
+            'profile:data': json.dumps(profile_data)
+        }
+        table.put(row_key, data)
     
     def close(self):
         """关闭连接"""
